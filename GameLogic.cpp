@@ -1,0 +1,57 @@
+#include "GameLogic.h"
+#include "MoveGen.h"
+
+bool GameLogic::isInCheck(const Board& board, Color color) {
+    // Gaseste pozitia regelui
+    int kingRow = -1, kingCol = -1;
+    char kingPiece = (color == Color::White) ? 'K' : 'k';
+    for (int r = 0; r < 8; r++)
+        for (int c = 0; c < 8; c++)
+            if (board.grid[r][c] == kingPiece) { kingRow = r; kingCol = c; }
+
+    if (kingRow == -1) return false;
+
+    // Verifica daca vreo piesa adversa poate ajunge la rege
+    Color enemy = (color == Color::White) ? Color::Black : Color::White;
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            if (Board::pieceColor(board.grid[r][c]) != enemy) continue;
+            auto moves = MoveGen::getRawMoves(board, r, c);
+            for (auto& m : moves)
+                if (m.toRow == kingRow && m.toCol == kingCol)
+                    return true;
+        }
+    }
+    return false;
+}
+
+std::vector<Move> GameLogic::getLegalMoves(const Board& board, int row, int col) {
+    std::vector<Move> legal;
+    Color myColor = Board::pieceColor(board.grid[row][col]);
+    auto rawMoves = MoveGen::getRawMoves(board, row, col);
+
+    for (auto& move : rawMoves) {
+        // Simuleaza mutarea
+        Board copy = board;
+        char captured = copy.grid[move.toRow][move.toCol];
+        copy.applyMove(move);
+        // Valida doar daca nu lasam regele in sah
+        if (!isInCheck(copy, myColor))
+            legal.push_back(move);
+    }
+    return legal;
+}
+
+bool GameLogic::isCheckmate(const Board& board, Color color) {
+    if (!isInCheck(board, color)) return false;
+    return isStalemate(board, color); // Daca e in sah si nu are mutari = mat
+}
+
+bool GameLogic::isStalemate(const Board& board, Color color) {
+    for (int r = 0; r < 8; r++)
+        for (int c = 0; c < 8; c++)
+            if (Board::pieceColor(board.grid[r][c]) == color)
+                if (!getLegalMoves(board, r, c).empty())
+                    return false;
+    return true;
+}

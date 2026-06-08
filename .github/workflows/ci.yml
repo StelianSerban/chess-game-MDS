@@ -65,12 +65,19 @@ jobs:
         id: slug
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      - name: Package release
+        run: |
+          mkdir -p release
+          cp app release/
+          cp -r sprites release/
+          cd release && zip -r ../chess-linux.zip .
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ steps.slug.outputs.sha }}
           name: "Build ${{ steps.slug.outputs.sha }}"
           body: "Automatic build from commit ${{ github.sha }}"
-          files: app
+          files: chess-linux.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

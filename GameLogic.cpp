@@ -1,8 +1,8 @@
 #include "GameLogic.h"
 #include "MoveGen.h"
+#include <cstdlib>
 
 bool GameLogic::isInCheck(const Board& board, Color color) {
-    // Gaseste pozitia regelui
     int kingRow = -1, kingCol = -1;
     char kingPiece = (color == Color::White) ? 'K' : 'k';
     for (int r = 0; r < 8; r++)
@@ -11,7 +11,6 @@ bool GameLogic::isInCheck(const Board& board, Color color) {
 
     if (kingRow == -1) return false;
 
-    // Verifica daca vreo piesa adversa poate ajunge la rege
     Color enemy = (color == Color::White) ? Color::Black : Color::White;
     for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
@@ -31,12 +30,21 @@ std::vector<Move> GameLogic::getLegalMoves(const Board& board, int row, int col)
     auto rawMoves = MoveGen::getRawMoves(board, row, col);
 
     for (auto& move : rawMoves) {
-        // Simuleaza mutarea
         Board copy = board;
-        char captured = copy.grid[move.toRow][move.toCol];
         copy.applyMove(move);
-        // Valida doar daca nu lasam regele in sah
-        if (!isInCheck(copy, myColor))
+
+        bool valid = !isInCheck(copy, myColor);
+
+        char piece = board.grid[row][col];
+        if ((piece == 'K' || piece == 'k') && abs(move.toCol - move.fromCol) == 2) {
+            int midCol = (move.fromCol + move.toCol) / 2;
+            Board mid = board;
+            mid.applyMove({row, col, row, midCol});
+            if (isInCheck(mid, myColor)) valid = false;
+            if (isInCheck(board, myColor)) valid = false;
+        }
+
+        if (valid)
             legal.push_back(move);
     }
     return legal;
@@ -44,7 +52,7 @@ std::vector<Move> GameLogic::getLegalMoves(const Board& board, int row, int col)
 
 bool GameLogic::isCheckmate(const Board& board, Color color) {
     if (!isInCheck(board, color)) return false;
-    return isStalemate(board, color); // Daca e in sah si nu are mutari = mat
+    return isStalemate(board, color);
 }
 
 bool GameLogic::isStalemate(const Board& board, Color color) {

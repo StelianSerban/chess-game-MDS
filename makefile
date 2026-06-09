@@ -4,7 +4,7 @@ LIBS     = -lsfml-graphics -lsfml-window -lsfml-system
 GTEST    = -lgtest -lgtest_main -pthread
 TARGET   = app
 TEST_TARGET = run_tests
-SRCS     = main.cpp Board.cpp MoveGen.cpp GameLogic.cpp
+SRCS = main.cpp Board.cpp MoveGen.cpp GameLogic.cpp Bot.cpp
 TEST_SRCS = tests/test_board.cpp tests/test_movegen.cpp tests/test_gamelogic.cpp \
             Board.cpp MoveGen.cpp GameLogic.cpp
 

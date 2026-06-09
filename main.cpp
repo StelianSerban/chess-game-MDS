@@ -6,6 +6,7 @@
 #include "Board.h"
 #include "GameLogic.h"
 #include "Move.h"
+#include "Bot.h"
 
 const int WINDOW_SIZE = 800;
 const int BOARD_SIZE  = 8;
@@ -13,10 +14,18 @@ const int BOARD_PX    = WINDOW_SIZE * 0.8f;
 const int TILE_SIZE   = BOARD_PX / BOARD_SIZE;
 const int OFFSET      = (WINDOW_SIZE - BOARD_PX) / 2;
 
+bool vsBot    = false;
+Color botColor = Color::Black;
+const int BOT_DEPTH = 3;
+
 int main()
 {
-    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE, WINDOW_SIZE), "Tabla de Sah");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE, WINDOW_SIZE), "Chess");
     window.setFramerateLimit(60);
+
+    // Font pentru ecranul de start
+    sf::Font font;
+    bool fontLoaded = font.loadFromFile("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
 
     std::map<char, sf::Texture> textures;
     std::map<char, std::string> filenames = {
@@ -40,21 +49,85 @@ int main()
 
     sf::RectangleShape square(sf::Vector2f(TILE_SIZE, TILE_SIZE));
 
+    // ── Ecran de start ──────────────────────────────────────────
+    bool gameStarted = false;
+    while (window.isOpen() && !gameStarted)
+    {
+        sf::Event event;
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed)
+                window.close();
+            if (event.type == sf::Event::KeyPressed)
+            {
+                if (event.key.code == sf::Keyboard::Num1)
+                { vsBot = false; gameStarted = true; }
+                if (event.key.code == sf::Keyboard::Num2)
+                { vsBot = true;  gameStarted = true; }
+                if (event.key.code == sf::Keyboard::Escape)
+                    window.close();
+            }
+        }
+
+        window.clear(bgColor);
+
+        if (fontLoaded)
+        {
+            auto makeText = [&](const std::string& str, int size, float y) {
+                sf::Text t;
+                t.setFont(font);
+                t.setString(str);
+                t.setCharacterSize(size);
+                t.setFillColor(sf::Color(240, 217, 160));
+                sf::FloatRect bounds = t.getLocalBounds();
+                t.setPosition((WINDOW_SIZE - bounds.width) / 2.f, y);
+                return t;
+            };
+
+            window.draw(makeText("Chess", 52, 180));
+            window.draw(makeText("1  -  Doi jucatori", 28, 320));
+            window.draw(makeText("2  -  Contra bot", 28, 370));
+            window.draw(makeText("Esc  -  Iesire", 20, 500));
+        }
+
+        window.display();
+    }
+
+    // ── Stare joc ───────────────────────────────────────────────
     Board board;
 
     bool hasPieceSelected = false;
     int  selectedRow = -1, selectedCol = -1;
     std::vector<Move> legalMoves;
 
-    // Stare promovare
     bool awaitingPromotion = false;
     int  promotionRow = -1, promotionCol = -1;
     bool promotionIsWhite = true;
-    // Piesele din care alege (in ordine: Regina, Turn, Nebun, Cal)
     std::string promotionChoices[4];
 
+    bool botThinking = false;
+
+    // ── Game loop ────────────────────────────────────────────────
     while (window.isOpen())
     {
+        // Mutarea botului
+        if (vsBot && !awaitingPromotion && board.currentTurn == botColor && !botThinking)
+        {
+            botThinking = true;
+            Move botMove = Bot::getBestMove(board, botColor, BOT_DEPTH);
+            board.applyMove(botMove);
+
+            // Promovare automata regina
+            char landed = board.grid[botMove.toRow][botMove.toCol];
+            if ((landed == 'p' || landed == 'P') &&
+                (botMove.toRow == 0 || botMove.toRow == 7))
+            {
+                board.grid[botMove.toRow][botMove.toCol] =
+                    (botColor == Color::White) ? 'Q' : 'q';
+            }
+            botThinking = false;
+        }
+
         sf::Event event;
         while (window.pollEvent(event))
         {
@@ -64,19 +137,20 @@ int main()
                 event.key.code == sf::Keyboard::Escape)
                 window.close();
 
+            // Blocheaza input-ul jucatorului cat timp e randul botului
+            if (vsBot && board.currentTurn == botColor) continue;
+
             if (event.type == sf::Event::MouseButtonPressed &&
                 event.mouseButton.button == sf::Mouse::Left)
             {
                 int mx = event.mouseButton.x;
                 int my = event.mouseButton.y;
 
-                // Daca asteptam promovare, trateaza click-ul pe UI
                 if (awaitingPromotion)
                 {
-                    // UI-ul are 4 patrate centrate orizontal
-                    int totalW   = 4 * TILE_SIZE;
-                    int startX   = (WINDOW_SIZE - totalW) / 2;
-                    int uiY      = (WINDOW_SIZE - TILE_SIZE) / 2;
+                    int totalW = 4 * TILE_SIZE;
+                    int startX = (WINDOW_SIZE - totalW) / 2;
+                    int uiY    = (WINDOW_SIZE - TILE_SIZE) / 2;
 
                     for (int i = 0; i < 4; i++)
                     {
@@ -90,7 +164,7 @@ int main()
                             break;
                         }
                     }
-                    continue; // Nu procesa alt input cat timp e promovare
+                    continue;
                 }
 
                 if (mx >= OFFSET && mx < OFFSET + BOARD_PX &&
@@ -124,9 +198,8 @@ int main()
                                 board.applyMove(m);
                                 moved = true;
 
-                                // Verifica promovare
                                 char landed = board.grid[m.toRow][m.toCol];
-                                bool isPawn = (landed == 'P' || landed == 'p');
+                                bool isPawn    = (landed == 'P' || landed == 'p');
                                 bool isPromoRow = (m.toRow == 0 || m.toRow == 7);
 
                                 if (isPawn && isPromoRow)
@@ -225,7 +298,7 @@ int main()
             }
         }
 
-        // UI promovare — overlay semi-transparent + 4 piese
+        // UI promovare
         if (awaitingPromotion)
         {
             sf::RectangleShape overlay(sf::Vector2f(WINDOW_SIZE, WINDOW_SIZE));
@@ -238,13 +311,11 @@ int main()
 
             for (int i = 0; i < 4; i++)
             {
-                // Fundal patrat
                 sf::RectangleShape cell(sf::Vector2f(TILE_SIZE, TILE_SIZE));
                 cell.setPosition(startX + i * TILE_SIZE, uiY);
                 cell.setFillColor(i % 2 == 0 ? lightColor : darkColor);
                 window.draw(cell);
 
-                // Piesa
                 char ch = promotionChoices[i][0];
                 if (textures.count(ch))
                 {
@@ -257,6 +328,18 @@ int main()
                     window.draw(sprite);
                 }
             }
+        }
+
+        // Indicator "Bot gandeste..." (optional)
+        if (vsBot && fontLoaded && board.currentTurn == botColor)
+        {
+            sf::Text t;
+            t.setFont(font);
+            t.setString("Bot gandeste...");
+            t.setCharacterSize(18);
+            t.setFillColor(sf::Color(240, 217, 160, 200));
+            t.setPosition(10, 10);
+            window.draw(t);
         }
 
         window.display();

@@ -4,7 +4,6 @@
 #include <vector>
 #include <cctype>
 
-// Piece-Square Tables pentru alb — pentru negru se oglindesc vertical
 const int PAWN_TABLE[8][8] = {
     { 0,  0,  0,  0,  0,  0,  0,  0},
     {50, 50, 50, 50, 50, 50, 50, 50},
@@ -84,9 +83,7 @@ int Bot::pieceValue(char piece) {
 }
 
 int Bot::positionalBonus(char piece, int row, int col, Color botColor) {
-    // Pentru negru oglindim vertical tabelul
     int r = (Board::pieceColor(piece) == Color::White) ? row : (7 - row);
-
     switch (tolower(piece)) {
         case 'p': return PAWN_TABLE[r][col];
         case 'n': return KNIGHT_TABLE[r][col];
@@ -104,9 +101,7 @@ int Bot::evaluate(const Board& board, Color botColor) {
         for (int c = 0; c < 8; c++) {
             char piece = board.grid[r][c];
             if (piece == ' ') continue;
-
             int val = pieceValue(piece) + positionalBonus(piece, r, c, botColor);
-
             if (Board::pieceColor(piece) == botColor)
                 score += val;
             else
@@ -116,15 +111,29 @@ int Bot::evaluate(const Board& board, Color botColor) {
     return score;
 }
 
+int Bot::getEval(const Board& board, Color color) {
+    if (GameLogic::isCheckmate(board, board.currentTurn)) {
+        Color justMoved = (board.currentTurn == Color::White) ?
+                          Color::Black : Color::White;
+        return (justMoved == color) ? 100000 : -100000;
+    }
+    if (GameLogic::isStalemate(board, board.currentTurn)) return 0;
+    return evaluate(board, color);
+}
+
 int Bot::minimax(Board board, int depth, bool isMaximizing,
                  Color botColor, int alpha, int beta)
 {
     Color humanColor = (botColor == Color::White) ? Color::Black : Color::White;
 
-    if (GameLogic::isCheckmate(board, botColor))   return -100000;
-    if (GameLogic::isCheckmate(board, humanColor)) return  100000;
-    if (GameLogic::isStalemate(board, botColor))   return 0;
-    if (GameLogic::isStalemate(board, humanColor)) return 0;
+    // Verifica mat/pat pentru culoarea care urmeaza sa mute
+    if (GameLogic::isCheckmate(board, board.currentTurn)) {
+        Color justMoved = (board.currentTurn == Color::White) ?
+                          Color::Black : Color::White;
+        if (justMoved == botColor) return  100000 + depth;
+        else                       return -100000 - depth;
+    }
+    if (GameLogic::isStalemate(board, board.currentTurn)) return 0;
     if (depth == 0) return evaluate(board, botColor);
 
     Color currentColor = isMaximizing ? botColor : humanColor;
@@ -142,7 +151,7 @@ int Bot::minimax(Board board, int depth, bool isMaximizing,
                     int score = minimax(copy, depth - 1, false, botColor, alpha, beta);
                     best  = std::max(best, score);
                     alpha = std::max(alpha, best);
-                    if (beta <= alpha) goto done_max; // pruning
+                    if (beta <= alpha) goto done_max;
                 }
             }
         }
@@ -162,7 +171,7 @@ int Bot::minimax(Board board, int depth, bool isMaximizing,
                     int score = minimax(copy, depth - 1, true, botColor, alpha, beta);
                     best = std::min(best, score);
                     beta = std::min(beta, best);
-                    if (beta <= alpha) goto done_min; // pruning
+                    if (beta <= alpha) goto done_min;
                 }
             }
         }
@@ -172,7 +181,7 @@ int Bot::minimax(Board board, int depth, bool isMaximizing,
 }
 
 Move Bot::getBestMove(const Board& board, Color color, int depth) {
-    int best = INT_MIN;
+    int best  = INT_MIN;
     Move bestMove{0, 0, 0, 0};
     int alpha = INT_MIN;
     int beta  = INT_MAX;
@@ -194,4 +203,68 @@ Move Bot::getBestMove(const Board& board, Color color, int depth) {
         }
     }
     return bestMove;
+}
+
+int Bot::getFullEval(const Board& board, Color color, int depth) {
+    if (GameLogic::isCheckmate(board, board.currentTurn)) {
+        Color justMoved = (board.currentTurn == Color::White) ?
+                          Color::Black : Color::White;
+        return (justMoved == color) ? 100000 : -100000;
+    }
+    if (GameLogic::isStalemate(board, board.currentTurn)) return 0;
+
+    // dupa ce `color` a mutat, urmeaza adversarul
+    // deci next e minimizator pentru `color`
+    bool nextIsMaximizing = (board.currentTurn == color);
+    return minimax(board, depth, nextIsMaximizing, color, INT_MIN, INT_MAX);
+}
+
+int Bot::scoreMoveWithMinimax(const Board& board, const Move& move,
+                               Color color, int depth)
+{
+    Board copy = board;
+    copy.applyMove(move);
+    bool nextIsMaximizing = (copy.currentTurn == color);
+    if (GameLogic::isCheckmate(copy, copy.currentTurn)) {
+        Color justMoved = (copy.currentTurn == Color::White) ?
+                          Color::Black : Color::White;
+        return (justMoved == color) ? 100000 : -100000;
+    }
+    if (GameLogic::isStalemate(copy, copy.currentTurn)) return 0;
+    return minimax(copy, depth - 1, nextIsMaximizing, color, INT_MIN, INT_MAX);
+}
+
+std::pair<Move, int> Bot::getBestMoveWithScore(const Board& board,
+                                                Color color, int depth)
+{
+    int best  = INT_MIN;
+    Move bestMove{0, 0, 0, 0};
+    int alpha = INT_MIN;
+    int beta  = INT_MAX;
+
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            if (Board::pieceColor(board.grid[r][c]) != color) continue;
+            auto moves = GameLogic::getLegalMoves(board, r, c);
+            for (auto& move : moves) {
+                Board copy = board;
+                copy.applyMove(move);
+                bool nextIsMaximizing = (copy.currentTurn == color);
+                if (GameLogic::isCheckmate(copy, copy.currentTurn)) {
+                    Color justMoved = (copy.currentTurn == Color::White) ?
+                                      Color::Black : Color::White;
+                    int score = (justMoved == color) ? 100000 : -100000;
+                    if (score > best) { best = score; bestMove = move; }
+                    alpha = std::max(alpha, best);
+                    continue;
+                }
+                if (GameLogic::isStalemate(copy, copy.currentTurn)) continue;
+                int score = minimax(copy, depth - 1, nextIsMaximizing,
+                                    color, alpha, beta);
+                if (score > best) { best = score; bestMove = move; }
+                alpha = std::max(alpha, best);
+            }
+        }
+    }
+    return {bestMove, best};
 }

@@ -6,28 +6,43 @@
 #include "Board.h"
 #include "GameLogic.h"
 #include "Move.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <iostream>
+#include <cstring>
+#include <cctype>
 
 const int WINDOW_SIZE = 800;
-const int BOARD_SIZE  = 8;
-const int BOARD_PX    = WINDOW_SIZE * 0.8f;
-const int TILE_SIZE   = BOARD_PX / BOARD_SIZE;
-const int OFFSET      = (WINDOW_SIZE - BOARD_PX) / 2;
+const int BOARD_SIZE = 8;
+const int BOARD_PX = WINDOW_SIZE * 0.8f;
+const int TILE_SIZE = BOARD_PX / BOARD_SIZE;
+const int OFFSET = (WINDOW_SIZE - BOARD_PX) / 2;
 
 int main()
 {
+    int write_fd = open("gui_to_engine", O_WRONLY);
+    int read_fd = open("./engine/engine_to_gui", O_RDONLY);
+    char buffer[256];
+
     sf::RenderWindow window(sf::VideoMode(WINDOW_SIZE, WINDOW_SIZE), "Tabla de Sah");
     window.setFramerateLimit(60);
 
     std::map<char, sf::Texture> textures;
     std::map<char, std::string> filenames = {
-        {'K', "w_king_1x_ns.png"},   {'Q', "w_queen_1x_ns.png"},
-        {'R', "w_rook_1x_ns.png"},   {'B', "w_bishop_1x_ns.png"},
-        {'N', "w_knight_1x_ns.png"}, {'P', "w_pawn_1x_ns.png"},
-        {'k', "b_king_1x_ns.png"},   {'q', "b_queen_1x_ns.png"},
-        {'r', "b_rook_1x_ns.png"},   {'b', "b_bishop_1x_ns.png"},
-        {'n', "b_knight_1x_ns.png"}, {'p', "b_pawn_1x_ns.png"},
+        {'K', "w_king_1x_ns.png"},
+        {'Q', "w_queen_1x_ns.png"},
+        {'R', "w_rook_1x_ns.png"},
+        {'B', "w_bishop_1x_ns.png"},
+        {'N', "w_knight_1x_ns.png"},
+        {'P', "w_pawn_1x_ns.png"},
+        {'k', "b_king_1x_ns.png"},
+        {'q', "b_queen_1x_ns.png"},
+        {'r', "b_rook_1x_ns.png"},
+        {'b', "b_bishop_1x_ns.png"},
+        {'n', "b_knight_1x_ns.png"},
+        {'p', "b_pawn_1x_ns.png"},
     };
-    for (auto& [ch, filename] : filenames)
+    for (auto &[ch, filename] : filenames)
         textures[ch].loadFromFile("sprites/PNGs/No shadow/1x/" + filename);
 
     sf::Color lightColor(240, 217, 160);
@@ -43,16 +58,17 @@ int main()
     Board board;
 
     bool hasPieceSelected = false;
-    int  selectedRow = -1, selectedCol = -1;
+    int selectedRow = -1, selectedCol = -1;
     std::vector<Move> legalMoves;
 
     // Stare promovare
     bool awaitingPromotion = false;
-    int  promotionRow = -1, promotionCol = -1;
+    int promotionRow = -1, promotionCol = -1;
     bool promotionIsWhite = true;
     // Piesele din care alege (in ordine: Regina, Turn, Nebun, Cal)
     std::string promotionChoices[4];
 
+    std::string movestr = "";
     while (window.isOpen())
     {
         sf::Event event;
@@ -74,9 +90,9 @@ int main()
                 if (awaitingPromotion)
                 {
                     // UI-ul are 4 patrate centrate orizontal
-                    int totalW   = 4 * TILE_SIZE;
-                    int startX   = (WINDOW_SIZE - totalW) / 2;
-                    int uiY      = (WINDOW_SIZE - TILE_SIZE) / 2;
+                    int totalW = 4 * TILE_SIZE;
+                    int startX = (WINDOW_SIZE - totalW) / 2;
+                    int uiY = (WINDOW_SIZE - TILE_SIZE) / 2;
 
                     for (int i = 0; i < 4; i++)
                     {
@@ -86,6 +102,18 @@ int main()
                         {
                             board.grid[promotionRow][promotionCol] =
                                 promotionChoices[i][0];
+                            movestr += std::tolower(promotionChoices[i][0]);
+
+                            write(write_fd, movestr.c_str(), movestr.size());
+                            read(read_fd, buffer, sizeof(buffer));
+                            std::string opponent_move(buffer);
+                            Move opponentMove{
+                                .fromRow = 8 - (opponent_move[1] - '0'),
+                                .fromCol = opponent_move[0] - 'a',
+                                .toRow = 8 - (opponent_move[3] - '0'),
+                                .toCol = opponent_move[2] - 'a'};
+                            board.applyMove(opponentMove);
+
                             awaitingPromotion = false;
                             break;
                         }
@@ -108,21 +136,27 @@ int main()
                             if (!moves.empty())
                             {
                                 hasPieceSelected = true;
-                                selectedRow      = clickRow;
-                                selectedCol      = clickCol;
-                                legalMoves       = moves;
+                                selectedRow = clickRow;
+                                selectedCol = clickCol;
+                                legalMoves = moves;
                             }
                         }
                     }
                     else
                     {
                         bool moved = false;
-                        for (auto& m : legalMoves)
+                        for (auto &m : legalMoves)
                         {
                             if (m.toRow == clickRow && m.toCol == clickCol)
                             {
                                 board.applyMove(m);
                                 moved = true;
+
+                                movestr = "";
+                                movestr += char('a' + m.fromCol);
+                                movestr += char('8' - m.fromRow);
+                                movestr += char('a' + m.toCol);
+                                movestr += char('8' - m.toRow);
 
                                 // Verifica promovare
                                 char landed = board.grid[m.toRow][m.toCol];
@@ -132,22 +166,38 @@ int main()
                                 if (isPawn && isPromoRow)
                                 {
                                     awaitingPromotion = true;
-                                    promotionRow      = m.toRow;
-                                    promotionCol      = m.toCol;
-                                    promotionIsWhite  = (landed == 'P');
+                                    promotionRow = m.toRow;
+                                    promotionCol = m.toCol;
+                                    promotionIsWhite = (landed == 'P');
 
-                                    if (promotionIsWhite) {
+                                    if (promotionIsWhite)
+                                    {
                                         promotionChoices[0] = "Q";
                                         promotionChoices[1] = "R";
                                         promotionChoices[2] = "B";
                                         promotionChoices[3] = "N";
-                                    } else {
+                                    }
+                                    else
+                                    {
                                         promotionChoices[0] = "q";
                                         promotionChoices[1] = "r";
                                         promotionChoices[2] = "b";
                                         promotionChoices[3] = "n";
                                     }
                                 }
+                                else
+                                {
+                                    write(write_fd, movestr.c_str(), movestr.size());
+                                    read(read_fd, buffer, sizeof(buffer));
+                                    std::string opponent_move(buffer);
+                                    Move opponentMove{
+                                        .fromRow = 8 - (opponent_move[1] - '0'),
+                                        .fromCol = opponent_move[0] - 'a',
+                                        .toRow = 8 - (opponent_move[3] - '0'),
+                                        .toCol = opponent_move[2] - 'a'};
+                                    board.applyMove(opponentMove);
+                                }
+
                                 break;
                             }
                         }
@@ -160,16 +210,28 @@ int main()
                                 auto moves = GameLogic::getLegalMoves(board, clickRow, clickCol);
                                 if (!moves.empty())
                                 {
-                                    selectedRow      = clickRow;
-                                    selectedCol      = clickCol;
-                                    legalMoves       = moves;
+                                    selectedRow = clickRow;
+                                    selectedCol = clickCol;
+                                    legalMoves = moves;
                                     hasPieceSelected = true;
                                 }
-                                else { hasPieceSelected = false; legalMoves.clear(); }
+                                else
+                                {
+                                    hasPieceSelected = false;
+                                    legalMoves.clear();
+                                }
                             }
-                            else { hasPieceSelected = false; legalMoves.clear(); }
+                            else
+                            {
+                                hasPieceSelected = false;
+                                legalMoves.clear();
+                            }
                         }
-                        else { hasPieceSelected = false; legalMoves.clear(); }
+                        else
+                        {
+                            hasPieceSelected = false;
+                            legalMoves.clear();
+                        }
                     }
                 }
             }
@@ -183,7 +245,10 @@ int main()
             for (int r = 0; r < 8; r++)
                 for (int c = 0; c < 8; c++)
                     if (board.grid[r][c] == kingPiece)
-                    { checkKingRow = r; checkKingCol = c; }
+                    {
+                        checkKingRow = r;
+                        checkKingCol = c;
+                    }
         }
 
         window.clear(bgColor);
@@ -199,22 +264,32 @@ int main()
                 window.draw(square);
 
                 if (row == checkKingRow && col == checkKingCol)
-                { square.setFillColor(checkColor); window.draw(square); }
+                {
+                    square.setFillColor(checkColor);
+                    window.draw(square);
+                }
 
                 if (hasPieceSelected && row == selectedRow && col == selectedCol)
-                { square.setFillColor(selectedColor); window.draw(square); }
+                {
+                    square.setFillColor(selectedColor);
+                    window.draw(square);
+                }
 
                 if (hasPieceSelected)
-                    for (auto& m : legalMoves)
+                    for (auto &m : legalMoves)
                         if (m.toRow == row && m.toCol == col)
-                        { square.setFillColor(legalColor); window.draw(square); break; }
+                        {
+                            square.setFillColor(legalColor);
+                            window.draw(square);
+                            break;
+                        }
 
                 char piece = board.grid[row][col];
                 if (piece != ' ' && textures.count(piece))
                 {
                     sf::Sprite sprite(textures[piece]);
                     auto texSize = textures[piece].getSize();
-                    float scale  = (float)TILE_SIZE * 0.8f / std::max(texSize.x, texSize.y);
+                    float scale = (float)TILE_SIZE * 0.8f / std::max(texSize.x, texSize.y);
                     sprite.setScale(scale, scale);
                     float padding = (TILE_SIZE - texSize.x * scale) / 2.f;
                     sprite.setPosition(
@@ -234,7 +309,7 @@ int main()
 
             int totalW = 4 * TILE_SIZE;
             int startX = (WINDOW_SIZE - totalW) / 2;
-            int uiY    = (WINDOW_SIZE - TILE_SIZE) / 2;
+            int uiY = (WINDOW_SIZE - TILE_SIZE) / 2;
 
             for (int i = 0; i < 4; i++)
             {
@@ -250,7 +325,7 @@ int main()
                 {
                     sf::Sprite sprite(textures[ch]);
                     auto texSize = textures[ch].getSize();
-                    float scale  = (float)TILE_SIZE * 0.8f / std::max(texSize.x, texSize.y);
+                    float scale = (float)TILE_SIZE * 0.8f / std::max(texSize.x, texSize.y);
                     sprite.setScale(scale, scale);
                     float padding = (TILE_SIZE - texSize.x * scale) / 2.f;
                     sprite.setPosition(startX + i * TILE_SIZE + padding, uiY + padding);
@@ -262,5 +337,7 @@ int main()
         window.display();
     }
 
+    close(read_fd);
+    close(write_fd);
     return 0;
 }

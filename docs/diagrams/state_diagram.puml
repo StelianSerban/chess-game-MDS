@@ -1,0 +1,56 @@
+@startuml
+
+skinparam stateBackgroundColor #F1EFE8
+skinparam stateBorderColor #5F5E5A
+skinparam stateArrowThickness 1.2
+skinparam arrowColor #5F5E5A
+skinparam noteBackgroundColor #D3D1C7
+skinparam noteBorderColor #5F5E5A
+
+[*] --> Initializare
+
+Initializare : tabla reset
+Initializare : currentTurn = White
+Initializare --> AsteptareInput
+
+AsteptareInput : asteapta click jucator
+
+AsteptareInput --> PiesaSelectata : click pe piesa proprie\ncu mutari legale
+AsteptareInput --> AsteptareInput : click invalid
+
+PiesaSelectata : highlight piesa
+PiesaSelectata : afiseaza mutari legale
+
+PiesaSelectata --> PiesaSelectata : click pe alta piesa proprie
+PiesaSelectata --> AsteptareInput : click in afara tablei
+PiesaSelectata --> MutareExecutata : click pe destinatie legala
+
+MutareExecutata : applyMove()
+MutareExecutata : actualizeaza enPassant
+MutareExecutata : actualizeaza flag-uri rocada
+MutareExecutata : schimba currentTurn
+
+MutareExecutata --> Promovare : pion pe ultima linie
+MutareExecutata --> VerificareStare : mutare normala
+
+Promovare : afiseaza UI selectie piesa
+Promovare : asteapta alegerea jucatorului
+Promovare --> VerificareStare : jucator a ales piesa
+
+VerificareStare --> Sah : isInCheck == true
+VerificareStare --> AsteptareInput : isInCheck == false
+
+Sah : highlight rege in rosu
+Sah --> SahMat : isCheckmate == true
+Sah --> AsteptareInput : isCheckmate == false
+
+SahMat : afiseaza mesaj MAT
+SahMat : jocul s-a terminat
+SahMat --> [*]
+
+AsteptareInput --> Pat : isStalemate == true
+Pat : afiseaza mesaj PAT
+Pat : jocul s-a terminat
+Pat --> [*]
+
+@enduml

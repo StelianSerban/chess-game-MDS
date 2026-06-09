@@ -1,0 +1,77 @@
+@startuml
+
+skinparam sequenceArrowThickness 1.2
+skinparam participantBackgroundColor #F1EFE8
+skinparam participantBorderColor #5F5E5A
+skinparam sequenceLifeLineBorderColor #888780
+skinparam sequenceLifeLineBorderThickness 1
+skinparam noteBorderColor #5F5E5A
+skinparam noteBackgroundColor #D3D1C7
+
+actor Jucator
+participant "main.cpp" as Main
+participant "GameLogic" as GL
+participant "MoveGen" as MG
+participant "Board" as B
+
+Jucator -> Main : click pe piesa
+Main -> B : pieceColor(piece) == currentTurn?
+B --> Main : true
+
+Main -> GL : getLegalMoves(board, row, col)
+GL -> MG : getRawMoves(board, row, col)
+MG --> GL : vector<Move>
+
+loop pentru fiecare mutare raw
+    GL -> B : applyMove(move) pe copie
+    GL -> GL : isInCheck(copy, myColor)
+    GL -> B : [rocada] verifica patrat intermediar
+    GL --> GL : mutare valida / invalida
+end
+
+GL --> Main : vector<Move> legal
+Main --> Jucator : highlight mutari legale
+
+Jucator -> Main : click pe destinatie
+Main -> Main : cauta mutarea in legalMoves
+
+alt mutare gasita
+    Main -> B : applyMove(move)
+    B -> B : actualizeaza grid
+    B -> B : seteaza enPassant
+    B -> B : actualizeaza flag-uri rocada
+    B -> B : schimba currentTurn
+    B --> Main : ok
+
+    alt pion ajunge pe ultima linie
+        Main --> Jucator : afiseaza UI promovare
+        Jucator -> Main : alege piesa
+        Main -> B : grid[row][col] = piesa aleasa
+    end
+
+    Main -> GL : isInCheck(board, currentTurn)
+    GL -> MG : getRawMoves pentru fiecare piesa adversa
+    MG --> GL : miscari
+    GL --> Main : true / false
+
+    alt isInCheck
+        Main -> GL : isCheckmate(board, currentTurn)
+        GL --> Main : true / false
+        alt isCheckmate
+            Main --> Jucator : afiseaza MAT
+        else
+            Main --> Jucator : highlight rege in rosu
+        end
+    end
+
+else mutare negasita
+    alt click pe alta piesa proprie
+        Main -> GL : getLegalMoves(board, row, col)
+        GL --> Main : vector<Move> legal
+        Main --> Jucator : highlight piesa noua
+    else click invalid
+        Main --> Jucator : deselecteaza
+    end
+end
+
+@enduml

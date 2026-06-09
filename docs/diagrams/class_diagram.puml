@@ -1,0 +1,72 @@
+@startuml
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 13
+skinparam classBackgroundColor #F1EFE8
+skinparam classBorderColor #5F5E5A
+skinparam classHeaderBackgroundColor #D3D1C7
+skinparam arrowColor #5F5E5A
+skinparam arrowThickness 1.2
+
+enum Color {
+    White
+    Black
+    None
+}
+
+class Move {
+    + fromRow : int
+    + fromCol : int
+    + toRow : int
+    + toCol : int
+}
+
+class Board {
+    + grid : char[8][8]
+    + currentTurn : Color
+    + enPassantRow : int
+    + enPassantCol : int
+    + whiteKingMoved : bool
+    + blackKingMoved : bool
+    + whiteRookAMoved : bool
+    + whiteRookHMoved : bool
+    + blackRookAMoved : bool
+    + blackRookHMoved : bool
+    --
+    + Board()
+    + reset() : void
+    + applyMove(move : Move) : bool
+    + undoMove(move : Move, captured : char, ...) : void
+    + {static} pieceColor(piece : char) : Color
+    + {static} isWhitePiece(piece : char) : bool
+    + {static} isBlackPiece(piece : char) : bool
+    + {static} inBounds(row : int, col : int) : bool
+}
+
+class MoveGen {
+    + {static} getRawMoves(board : Board, row : int, col : int) : vector<Move>
+    - {static} addSlidingMoves(board : Board, row : int, col : int, dirs : int[][], numDirs : int, moves : vector<Move>) : void
+    - {static} getPawnMoves(board : Board, row : int, col : int) : vector<Move>
+    - {static} getKnightMoves(board : Board, row : int, col : int) : vector<Move>
+    - {static} getBishopMoves(board : Board, row : int, col : int) : vector<Move>
+    - {static} getRookMoves(board : Board, row : int, col : int) : vector<Move>
+    - {static} getQueenMoves(board : Board, row : int, col : int) : vector<Move>
+    - {static} getKingMoves(board : Board, row : int, col : int) : vector<Move>
+}
+
+class GameLogic {
+    + {static} isInCheck(board : Board, color : Color) : bool
+    + {static} getLegalMoves(board : Board, row : int, col : int) : vector<Move>
+    + {static} isCheckmate(board : Board, color : Color) : bool
+    + {static} isStalemate(board : Board, color : Color) : bool
+}
+
+Board --> Color : currentTurn
+Board ..> Move : applyMove / undoMove
+MoveGen ..> Board : reads
+MoveGen ..> Move : returns
+GameLogic ..> Board : reads
+GameLogic ..> Move : returns
+GameLogic ..> MoveGen : calls getRawMoves
+
+@enduml

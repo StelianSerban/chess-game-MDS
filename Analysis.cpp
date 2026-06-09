@@ -5,8 +5,9 @@
 #include <cctype>
 
 MoveQuality Analysis::classify(int loss, int evalBest, int evalAfter) {
-    if (evalAfter >= 90000)  return MoveQuality::Good;    // mat dat
+    
     if (evalBest  >= 90000)  return MoveQuality::Blunder; // mat ratat
+    if (evalAfter >= 90000)  return MoveQuality::Good;    // mat dat
     if (loss >= 500)         return MoveQuality::Blunder;  // 5 pioni
     if (loss >= 250)         return MoveQuality::Mistake;  // 2.5 pioni
     if (loss >= 100)         return MoveQuality::Inaccuracy; // 1 pion

@@ -49,6 +49,10 @@ make test
 
 Asigură-te că folderul `sprites/` se află în același director cu executabilul.
 
+
+## Demo
+https://www.youtube.com/watch?v=3PBQDutvgRU
+
 ## Structura proiectului
 
 ```
